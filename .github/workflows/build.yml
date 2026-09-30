@@ -1,0 +1,54 @@
+name: Build Nexo Calculator
+
+on:
+  workflow_dispatch:
+
+  push:
+    branches:
+      - main
+
+jobs:
+  build:
+    name: Build Windows EXE
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install customtkinter pyinstaller
+
+      - name: Build Nexo Calculator
+        run: |
+          pyinstaller `
+            --onefile `
+            --windowed `
+            --name NexoCalculator `
+            --paths SOURCE `
+            SOURCE/main.py
+
+      - name: Verify build
+        shell: powershell
+        run: |
+          if (!(Test-Path "dist\NexoCalculator.exe")) {
+            Write-Error "NexoCalculator.exe was not created."
+            exit 1
+          }
+
+          Write-Host "Build successful."
+          Get-Item "dist\NexoCalculator.exe"
+
+      - name: Upload dist
+        uses: actions/upload-artifact@v4
+        with:
+          name: NexoCalculator
+          path: dist/NexoCalculator.exe
+          if-no-files-found: error
