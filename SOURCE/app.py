@@ -19,11 +19,11 @@ from Updates.update_manager import (
 
 # ============================================================
 # Nexo Calculator
-# Public Version:  v0.2026.00008
+# Public Version:  v0.2026.00009
 # Internal Build:  INT01
 # ============================================================
 
-PUBLIC_VERSION = "0.2026.00008"
+PUBLIC_VERSION = "0.2026.00009"
 INTERNAL_BUILD = "INT01"
 
 
