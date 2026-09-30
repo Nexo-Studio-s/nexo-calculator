@@ -3,10 +3,10 @@ import platform
 import customtkinter as ctk
 from tkinter import messagebox
 
-from calculator import Calculator
-from input import CalculatorInput
-from keyboard import CalculatorKeyboard
-from ui import CalculatorUI
+from Calculate.calculator import Calculator
+from Input.input import CalculatorInput
+from NOTsoDRIVERS.keyboard import CalculatorKeyboard
+from UserInterface.ui import CalculatorUI
 
 
 # ============================================================
@@ -17,6 +17,7 @@ from ui import CalculatorUI
 
 PUBLIC_VERSION = "0.2026.00007"
 INTERNAL_BUILD = "INT01"
+
 
 ctk.set_appearance_mode("Dark")
 ctk.set_default_color_theme("blue")
@@ -52,29 +53,14 @@ class NexoCalculator(ctk.CTk):
         for j in range(4):
             self.grid_columnconfigure(j, weight=1)
 
-        self.font_display = ("Consolas", 26, "bold")
-        self.font_buttons = ("Consolas", 16)
-
-        self.bg_glass = "#161b22"
-        self.border_glass = "#30363d"
-
-        self.accent_color = "#19a8b2"
-        self.accent_hover = "#14868e"
-
-        self.delete_color = "#d9534f"
-        self.delete_hover = "#b53f3c"
-
-        self.equal_color = "#23c2ce"
-        self.equal_hover = "#1ca2ad"
-
         self.input_box = ctk.CTkEntry(
             self,
-            font=self.font_display,
+            font=("Consolas", 26, "bold"),
             justify="right",
             height=65,
             corner_radius=12,
-            fg_color=self.bg_glass,
-            border_color=self.border_glass,
+            fg_color="#161b22",
+            border_color="#30363d",
             border_width=1,
             text_color="#f0f6fc"
         )
@@ -97,18 +83,22 @@ class NexoCalculator(ctk.CTk):
             error_messages=self.ERROR_MESSAGES
         )
 
+        self.calculator_input.set_calculator(
+            self.calculator
+        )
+
         self.calculator_keyboard = CalculatorKeyboard(
             calculator_input=self.calculator_input
         )
 
-        ui = CalculatorUI(
+        self.ui = CalculatorUI(
             app=self,
             input_box=self.input_box,
             calculator=self.calculator,
             calculator_input=self.calculator_input
         )
 
-        ui.create_buttons()
+        self.ui.create_buttons()
 
         self.bind(
             "<Return>",
