@@ -3,9 +3,13 @@ name: Build Nexo Calculator
 on:
   workflow_dispatch:
 
+env:
+  VELOPACK_VERSION: "1.2.158"
+  VELOPACK_PACKAGE_VERSION: "0.2026.8"
+
 jobs:
   build:
-    name: Build Windows EXE
+    name: Build and Package Windows App
     runs-on: windows-latest
 
     steps:
@@ -17,34 +21,76 @@ jobs:
         with:
           python-version: "3.13"
 
-      - name: Install dependencies
+      - name: Install Python dependencies
         run: |
           python -m pip install --upgrade pip
-          python -m pip install customtkinter pyinstaller
+          python -m pip install customtkinter pyinstaller "velopack==1.2.158"
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.x"
+
+      - name: Install Velopack CLI
+        shell: powershell
+        run: |
+          dotnet tool install -g vpk --version $env:VELOPACK_VERSION
+          vpk --version
 
       - name: Build Nexo Calculator
+        shell: powershell
         run: |
           pyinstaller `
-            --onefile `
+            --onedir `
             --windowed `
             --name NexoCalculator `
             --paths SOURCE `
             SOURCE/main.py
 
-      - name: Verify build
+      - name: Verify PyInstaller build
         shell: powershell
         run: |
-          if (!(Test-Path "dist\NexoCalculator.exe")) {
+          if (!(Test-Path "dist\NexoCalculator\NexoCalculator.exe")) {
             Write-Error "NexoCalculator.exe was not created."
             exit 1
           }
 
-          Write-Host "Build successful."
-          Get-Item "dist\NexoCalculator.exe"
+          Write-Host "PyInstaller build successful."
+          Get-Item "dist\NexoCalculator\NexoCalculator.exe"
 
-      - name: Upload dist
+      - name: Package with Velopack
+        shell: powershell
+        run: |
+          New-Item -ItemType Directory -Force -Path "Releases" | Out-Null
+
+          vpk pack `
+            --packId "Nexo-Studio-s.NexoCalculator" `
+            --packVersion $env:VELOPACK_PACKAGE_VERSION `
+            --packDir ".\dist\NexoCalculator" `
+            --mainExe "NexoCalculator.exe" `
+            --outputDir ".\Releases"
+
+      - name: Verify Velopack package
+        shell: powershell
+        run: |
+          if (!(Test-Path "Releases")) {
+            Write-Error "Velopack did not create the Releases directory."
+            exit 1
+          }
+
+          $files = Get-ChildItem "Releases" -File
+
+          if ($files.Count -eq 0) {
+            Write-Error "Velopack did not create any release files."
+            exit 1
+          }
+
+          Write-Host "Velopack package created successfully."
+          $files | Select-Object Name, Length
+
+      - name: Upload Velopack release
         uses: actions/upload-artifact@v4
         with:
-          name: NexoCalculator
-          path: dist/NexoCalculator.exe
+          name: NexoCalculator-Velopack
+          path: Releases/*
           if-no-files-found: error
