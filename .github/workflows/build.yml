@@ -3,10 +3,6 @@ name: Build Nexo Calculator
 on:
   workflow_dispatch:
 
-  push:
-    branches:
-      - main
-
 jobs:
   build:
     name: Build Windows EXE
