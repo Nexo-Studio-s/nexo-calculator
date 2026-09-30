@@ -11,11 +11,11 @@ from UserInterface.ui import CalculatorUI
 
 # ============================================================
 # Nexo Calculator
-# Public Version:  v0.2026.00007
-# Internal Build:  INT01
+# Public Version:  v0.2026.00008
+# Internal Build:  INT05
 # ============================================================
 
-PUBLIC_VERSION = "0.2026.00007"
+PUBLIC_VERSION = "0.2026.00008"
 INTERNAL_BUILD = "INT01"
 
 
