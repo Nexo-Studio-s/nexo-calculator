@@ -15,7 +15,14 @@ class CalculatorUI:
         self.calculator = calculator
         self.calculator_input = calculator_input
 
-        self.font_buttons = ("Consolas", 16)
+        # =====================================================
+        # STYLE
+        # =====================================================
+
+        self.font_buttons = (
+            "Consolas",
+            16
+        )
 
         self.bg_glass = "#161b22"
         self.border_glass = "#30363d"
@@ -29,85 +36,274 @@ class CalculatorUI:
         self.equal_color = "#23c2ce"
         self.equal_hover = "#1ca2ad"
 
+        # =====================================================
+        # INTERNAL STATE
+        # =====================================================
+
+        self.button_frame = None
+        self.buttons = []
+
+    # =========================================================
+    # CLEAN START
+    # =========================================================
+
     def create_buttons(self):
+        """
+        Bouwt de calculator-UI volledig opnieuw op.
+
+        Er wordt bewust eerst alles verwijderd wat deze UI
+        eerder heeft aangemaakt. Hierdoor ontstaan geen dubbele
+        widgets of oude callbacks bij een nieuwe initialisatie.
+        """
+
+        self._clear_previous_ui()
+
+        # -----------------------------------------------------
+        # Container
+        # -----------------------------------------------------
+
+        self.button_frame = ctk.CTkFrame(
+            self.app,
+            fg_color="transparent"
+        )
+
+        self.button_frame.grid(
+            row=1,
+            column=0,
+            sticky="nsew",
+            padx=10,
+            pady=10
+        )
+
+        # -----------------------------------------------------
+        # Grid configuration
+        # -----------------------------------------------------
+
+        for column in range(4):
+
+            self.button_frame.grid_columnconfigure(
+                column,
+                weight=1,
+                uniform="calculator_column"
+            )
+
+        for row in range(6):
+
+            self.button_frame.grid_rowconfigure(
+                row,
+                weight=1,
+                uniform="calculator_row"
+            )
+
+        # -----------------------------------------------------
+        # Button definitions
+        # -----------------------------------------------------
 
         buttons = [
-            ("%", 1, 0, None, None),
-            ("CE", 1, 1, None, None),
-            ("C", 1, 2, None, None),
-            ("⌫", 1, 3, self.delete_color, self.delete_hover),
+            ("%", 0, 0),
+            ("CE", 0, 1),
+            ("C", 0, 2),
+            ("⌫", 0, 3),
 
-            ("(", 2, 0, None, None),
-            ("𝑥²", 2, 1, None, None),
-            (")", 2, 2, None, None),
-            ("÷", 2, 3, self.accent_color, self.accent_hover),
+            ("(", 1, 0),
+            ("𝑥²", 1, 1),
+            (")", 1, 2),
+            ("÷", 1, 3),
 
-            ("7", 3, 0, None, None),
-            ("8", 3, 1, None, None),
-            ("9", 3, 2, None, None),
-            ("×", 3, 3, self.accent_color, self.accent_hover),
+            ("7", 2, 0),
+            ("8", 2, 1),
+            ("9", 2, 2),
+            ("×", 2, 3),
 
-            ("4", 4, 0, None, None),
-            ("5", 4, 1, None, None),
-            ("6", 4, 2, None, None),
-            ("-", 4, 3, self.accent_color, self.accent_hover),
+            ("4", 3, 0),
+            ("5", 3, 1),
+            ("6", 3, 2),
+            ("-", 3, 3),
 
-            ("1", 5, 0, None, None),
-            ("2", 5, 1, None, None),
-            ("3", 5, 2, None, None),
-            ("+", 5, 3, self.accent_color, self.accent_hover),
+            ("1", 4, 0),
+            ("2", 4, 1),
+            ("3", 4, 2),
+            ("+", 4, 3),
 
-            ("+/-", 6, 0, None, None),
-            ("0", 6, 1, None, None),
-            (".", 6, 2, None, None),
-            ("=", 6, 3, self.equal_color, self.equal_hover)
+            ("+/-", 5, 0),
+            ("0", 5, 1),
+            (".", 5, 2),
+            ("=", 5, 3)
         ]
 
-        for text, row, col, color, hover in buttons:
+        # -----------------------------------------------------
+        # Create buttons
+        # -----------------------------------------------------
 
-            if text == "=":
-                command = self.calculator_input.answer
+        for text, row, column in buttons:
 
-            elif text == "C":
-                command = self.calculator_input.clear_display
+            command = self._get_command(
+                text
+            )
 
-            elif text == "CE":
-                command = self.calculator_input.clear_entry
+            fg_color = self.bg_glass
+            hover_color = "#21262d"
+
+            # -------------------------------------------------
+            # Operator buttons
+            # -------------------------------------------------
+
+            if text in [
+                "÷",
+                "×",
+                "-",
+                "+"
+            ]:
+
+                fg_color = self.accent_color
+                hover_color = self.accent_hover
+
+            # -------------------------------------------------
+            # Delete button
+            # -------------------------------------------------
 
             elif text == "⌫":
-                command = self.calculator_input.backspace
 
-            elif text == "+/-":
-                command = self.calculator_input.toggle_sign
+                fg_color = self.delete_color
+                hover_color = self.delete_hover
 
-            elif text == "%":
-                command = self.calculator_input.percentage
+            # -------------------------------------------------
+            # Equals button
+            # -------------------------------------------------
 
-            else:
-                display_text = "²" if text == "𝑥²" else text
+            elif text == "=":
 
-                command = (
-                    lambda value=display_text:
-                    self.calculator_input.input_num(value)
-                )
+                fg_color = self.equal_color
+                hover_color = self.equal_hover
+
+            # -------------------------------------------------
+            # Button
+            # -------------------------------------------------
 
             button = ctk.CTkButton(
-                self.app,
+                self.button_frame,
                 text=text,
                 font=self.font_buttons,
                 command=command,
                 corner_radius=8,
-                fg_color=color if color else self.bg_glass,
-                border_color=self.border_glass if not color else None,
-                border_width=1 if not color else 0,
+                fg_color=fg_color,
+                hover_color=hover_color,
                 text_color="#f0f6fc",
-                hover_color=hover if hover else "#21262d"
+                border_color=(
+                    self.border_glass
+                    if fg_color == self.bg_glass
+                    else fg_color
+                ),
+                border_width=(
+                    1
+                    if fg_color == self.bg_glass
+                    else 0
+                )
             )
 
             button.grid(
                 row=row,
-                column=col,
+                column=column,
                 sticky="nsew",
                 padx=5,
                 pady=5
             )
+
+            self.buttons.append(
+                button
+            )
+
+    # =========================================================
+    # COMMAND ROUTING
+    # =========================================================
+
+    def _get_command(self, text):
+        """
+        Koppelt iedere knop aan exact één actie.
+
+        Hierdoor zijn er geen losse lambda's met verkeerde
+        waarden of onverwachte callbacks.
+        """
+
+        if text == "=":
+            return self.calculator_input.answer
+
+        if text == "C":
+            return self.calculator_input.clear_display
+
+        if text == "CE":
+            return self.calculator_input.clear_entry
+
+        if text == "⌫":
+            return self.calculator_input.backspace
+
+        if text == "+/-":
+            return self.calculator_input.toggle_sign
+
+        if text == "%":
+            return self.calculator_input.percentage
+
+        if text == "𝑥²":
+
+            return lambda: (
+                self.calculator_input.input_num(
+                    "²"
+                )
+            )
+
+        return lambda value=text: (
+            self.calculator_input.input_num(
+                value
+            )
+        )
+
+    # =========================================================
+    # CLEANUP
+    # =========================================================
+
+    def _clear_previous_ui(self):
+        """
+        Verwijdert uitsluitend de vorige button-container
+        van deze CalculatorUI.
+
+        De input_box en andere onderdelen van de applicatie
+        worden hierdoor niet aangeraakt.
+        """
+
+        # -----------------------------------------------------
+        # Oude knopreferenties opruimen
+        # -----------------------------------------------------
+
+        for button in self.buttons:
+
+            try:
+                button.destroy()
+            except Exception:
+                pass
+
+        self.buttons.clear()
+
+        # -----------------------------------------------------
+        # Oude container verwijderen
+        # -----------------------------------------------------
+
+        if self.button_frame is not None:
+
+            try:
+                self.button_frame.destroy()
+            except Exception:
+                pass
+
+            self.button_frame = None
+
+    # =========================================================
+    # DESTROY
+    # =========================================================
+
+    def destroy(self):
+        """
+        Handmatige cleanup wanneer de CalculatorUI
+        volledig verwijderd moet worden.
+        """
+
+        self._clear_previous_ui()
