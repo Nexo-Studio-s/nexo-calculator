@@ -3,45 +3,58 @@ class CalculatorInput:
     def __init__(self, input_box, error_messages):
         self.input_box = input_box
         self.ERROR_MESSAGES = error_messages
-
         self.calculator = None
+
+        self.operators = [
+            "+",
+            "-",
+            "×",
+            "÷"
+        ]
+
+    # =========================================================
+    # CALCULATOR
+    # =========================================================
 
     def set_calculator(self, calculator):
         self.calculator = calculator
 
-    def input_num(self, value):
-        current = self.input_box.get()
+    # =========================================================
+    # HELPERS
+    # =========================================================
 
-        if current in self.ERROR_MESSAGES:
+    def is_error(self):
+        return self.input_box.get() in self.ERROR_MESSAGES
+
+    def get_current(self):
+        return self.input_box.get()
+
+    def clear_display(self):
+        self.input_box.delete(
+            0,
+            "end"
+        )
+
+    def _clear_error_if_needed(self):
+        if self.is_error():
             self.clear_display()
-            current = ""
+            return True
 
-        operators = [
-            "+",
-            "-",
-            "×",
-            "÷",
-            "²",
-            "."
-        ]
+        return False
 
-        if (
-            value in operators
-            and current
-            and current[-1] in operators
-        ):
-            self.input_box.delete(
-                len(current) - 1,
-                "end"
-            )
-            current = self.input_box.get()
+    def _last_number(self, expression):
+        """
+        Geeft het laatste getal uit een expressie terug.
+        """
 
-        if value == ".":
-            number_part = current
+        if not expression:
+            return ""
 
-            last_operator = -1
+        index = len(expression) - 1
 
-            for character in [
+        while index >= 0:
+
+            if expression[index] in [
                 "+",
                 "-",
                 "×",
@@ -49,80 +62,246 @@ class CalculatorInput:
                 "(",
                 ")"
             ]:
-                position = current.rfind(character)
+                break
 
-                if position > last_operator:
-                    last_operator = position
+            index -= 1
 
-            if last_operator >= 0:
-                number_part = current[last_operator + 1:]
+        return expression[index + 1:]
 
+    # =========================================================
+    # INPUT
+    # =========================================================
+
+    def input_num(self, value):
+
+        self._clear_error_if_needed()
+
+        current = self.get_current()
+
+        value = str(value)
+
+        # -----------------------------------------------------
+        # Vier standaard operatoren
+        # -----------------------------------------------------
+
+        if value in self.operators:
+
+            # Geen operator aan het begin,
+            # behalve min voor een negatief getal.
+            if not current:
+
+                if value == "-":
+                    self.input_box.insert(
+                        "end",
+                        value
+                    )
+
+                return
+
+            # Geen dubbele operatoren.
+            if current[-1] in self.operators:
+
+                self.input_box.delete(
+                    len(current) - 1,
+                    "end"
+                )
+
+            self.input_box.insert(
+                "end",
+                value
+            )
+
+            return
+
+        # -----------------------------------------------------
+        # Decimal point
+        # -----------------------------------------------------
+
+        if value == ".":
+
+            number_part = self._last_number(
+                current
+            )
+
+            # Eén punt per getal.
             if "." in number_part:
                 return
 
-        self.input_box.insert(
-            "end",
-            str(value)
-        )
+            # Punt aan het begin -> 0.
+            if not current or current[-1] in self.operators:
 
-    def clear_display(self):
-        self.input_box.delete(0, "end")
-
-    def clear_entry(self):
-        current = self.input_box.get()
-
-        if not current or current in self.ERROR_MESSAGES:
-            self.clear_display()
-            return
-
-        for i in range(len(current) - 1, -1, -1):
-
-            if current[i] in [
-                "+",
-                "-",
-                "*",
-                "/",
-                "×",
-                "÷",
-                "("
-            ]:
-                self.input_box.delete(
-                    i + 1,
-                    "end"
+                self.input_box.insert(
+                    "end",
+                    "0."
                 )
+
                 return
 
-        self.clear_display()
+            # Punt na een haakje.
+            if current[-1] == "(":
 
-    def backspace(self):
-        current = self.input_box.get()
+                self.input_box.insert(
+                    "end",
+                    "0."
+                )
 
-        if current in self.ERROR_MESSAGES:
+                return
+
+            self.input_box.insert(
+                "end",
+                "."
+            )
+
+            return
+
+        # -----------------------------------------------------
+        # Square
+        # -----------------------------------------------------
+
+        if value == "²":
+
+            if not current:
+                return
+
+            if current[-1] in self.operators:
+                return
+
+            if current[-1] == "(":
+                return
+
+            self.input_box.insert(
+                "end",
+                "²"
+            )
+
+            return
+
+        # -----------------------------------------------------
+        # Normale waarde
+        # -----------------------------------------------------
+
+        self.input_box.insert(
+            "end",
+            value
+        )
+
+    # =========================================================
+    # CLEAR ENTRY
+    # =========================================================
+
+    def clear_entry(self):
+
+        current = self.get_current()
+
+        if not current or self.is_error():
             self.clear_display()
             return
 
-        if current:
+        # -----------------------------------------------------
+        # Verwijder eerst een eventueel ²-symbool
+        # -----------------------------------------------------
+
+        if current.endswith("²"):
             self.input_box.delete(
                 len(current) - 1,
                 "end"
             )
+            return
+
+        # -----------------------------------------------------
+        # Zoek einde van laatste invoer
+        # -----------------------------------------------------
+
+        depth = 0
+
+        for index in range(
+            len(current) - 1,
+            -1,
+            -1
+        ):
+
+            character = current[index]
+
+            if character == ")":
+                depth += 1
+
+            elif character == "(":
+                depth -= 1
+
+            if depth == 0 and character in [
+                "+",
+                "-",
+                "×",
+                "÷"
+            ]:
+
+                # Min aan het begin van een getal
+                # niet als operator behandelen.
+                if (
+                    character == "-"
+                    and index > 0
+                    and current[index - 1] in [
+                        "+",
+                        "-",
+                        "×",
+                        "÷",
+                        "("
+                    ]
+                ):
+                    continue
+
+                self.input_box.delete(
+                    index + 1,
+                    "end"
+                )
+
+                return
+
+        self.clear_display()
+
+    # =========================================================
+    # BACKSPACE
+    # =========================================================
+
+    def backspace(self):
+
+        current = self.get_current()
+
+        if self.is_error():
+            self.clear_display()
+            return
+
+        if not current:
+            return
+
+        self.input_box.delete(
+            len(current) - 1,
+            "end"
+        )
+
+    # =========================================================
+    # TOGGLE SIGN
+    # =========================================================
 
     def toggle_sign(self):
-        current = self.input_box.get()
 
-        if not current or current in self.ERROR_MESSAGES:
+        current = self.get_current()
+
+        if not current or self.is_error():
             return
 
-        if current[-1] in [
-            "+",
-            "-",
-            "×",
-            "÷",
-            "("
-        ]:
+        if current[-1] in self.operators:
             return
+
+        if current[-1] == "(":
+            return
+
+        # -----------------------------------------------------
+        # Alleen één getal
+        # -----------------------------------------------------
 
         try:
+
             value = float(current)
 
             if value.is_integer():
@@ -135,43 +314,59 @@ class CalculatorInput:
                 str(-value)
             )
 
+            return
+
         except ValueError:
+            pass
 
-            if (
-                current.startswith("-(")
-                and current.endswith(")")
-            ):
-                self.clear_display()
+        # -----------------------------------------------------
+        # Hele expressie
+        # -----------------------------------------------------
 
-                self.input_box.insert(
-                    "end",
-                    current[2:-1]
-                )
+        if (
+            current.startswith("-(")
+            and current.endswith(")")
+        ):
 
-            else:
-                self.clear_display()
+            self.clear_display()
 
-                self.input_box.insert(
-                    "end",
-                    f"-({current})"
-                )
+            self.input_box.insert(
+                "end",
+                current[2:-1]
+            )
+
+        else:
+
+            self.clear_display()
+
+            self.input_box.insert(
+                "end",
+                f"-({current})"
+            )
+
+    # =========================================================
+    # PERCENTAGE
+    # =========================================================
 
     def percentage(self):
-        current = self.input_box.get()
 
-        if not current or current in self.ERROR_MESSAGES:
+        current = self.get_current()
+
+        if not current or self.is_error():
             return
 
-        if current[-1] in [
-            "+",
-            "-",
-            "×",
-            "÷",
-            "("
-        ]:
+        if current[-1] in self.operators:
             return
+
+        if current[-1] == "(":
+            return
+
+        # -----------------------------------------------------
+        # Alleen een enkel getal
+        # -----------------------------------------------------
 
         try:
+
             value = float(current) / 100
 
             if value.is_integer():
@@ -184,41 +379,99 @@ class CalculatorInput:
                 str(value)
             )
 
+            return
+
         except ValueError:
-            self.input_num("÷100")
+            pass
 
-    def answer(self):
-        if not self.calculator:
-            return
+        # -----------------------------------------------------
+        # Laatste getal van een expressie
+        # -----------------------------------------------------
 
-        expression = self.input_box.get().strip()
+        number = self._last_number(
+            current
+        )
 
-        if not expression:
-            return
-
-        if expression in self.ERROR_MESSAGES:
+        if not number:
             return
 
         try:
 
-            while expression and expression[-1] in "+-×÷":
-                expression = expression[:-1]
+            value = float(number) / 100
 
-            if not expression:
-                return
+            if value.is_integer():
+                value = int(value)
 
-            clean_expression = (
-                expression
-                .replace("×", "*")
-                .replace("÷", "/")
-                .replace("²", "**2")
+            start = len(current) - len(number)
+
+            self.input_box.delete(
+                start,
+                "end"
             )
+
+            self.input_box.insert(
+                "end",
+                str(value)
+            )
+
+        except ValueError:
+            return
+
+    # =========================================================
+    # ANSWER
+    # =========================================================
+
+    def answer(self):
+
+        if not self.calculator:
+            return
+
+        expression = self.get_current().strip()
+
+        if not expression:
+            return
+
+        if self.is_error():
+            return
+
+        # -----------------------------------------------------
+        # Ongeldige afsluitende operatoren verwijderen
+        # -----------------------------------------------------
+
+        while (
+            expression
+            and expression[-1] in "+-×÷"
+        ):
+            expression = expression[:-1]
+
+        if not expression:
+            return
+
+        # -----------------------------------------------------
+        # Zet UI-symbolen om naar Python AST-symbolen
+        # -----------------------------------------------------
+
+        clean_expression = (
+            expression
+            .replace("×", "*")
+            .replace("÷", "/")
+            .replace("²", "**2")
+        )
+
+        try:
 
             result = self.calculator.safe_eval(
                 clean_expression
             )
 
-            if isinstance(result, float) and result.is_integer():
+            # -------------------------------------------------
+            # Mooie weergave van gehele floats
+            # -------------------------------------------------
+
+            if (
+                isinstance(result, float)
+                and result.is_integer()
+            ):
                 result = int(result)
 
             self.clear_display()
@@ -229,6 +482,7 @@ class CalculatorInput:
             )
 
         except ZeroDivisionError:
+
             self.clear_display()
 
             self.input_box.insert(
@@ -236,7 +490,35 @@ class CalculatorInput:
                 "Cannot divide by zero"
             )
 
+        except OverflowError:
+
+            self.clear_display()
+
+            self.input_box.insert(
+                "end",
+                "Number too large"
+            )
+
+        except ValueError:
+
+            self.clear_display()
+
+            self.input_box.insert(
+                "end",
+                "Invalid expression"
+            )
+
+        except TypeError:
+
+            self.clear_display()
+
+            self.input_box.insert(
+                "end",
+                "Invalid expression"
+            )
+
         except Exception:
+
             self.clear_display()
 
             self.input_box.insert(
