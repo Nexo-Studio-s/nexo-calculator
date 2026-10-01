@@ -14,7 +14,7 @@ from Updates.update_manager import (
 # NEXO CALCULATOR VERSION
 # ============================================================
 
-PUBLIC_VERSION = "0.2026.00009-PR2"
+PUBLIC_VERSION = "0.2026.00009"
 INTERNAL_BUILD = "INT01"
 
 
