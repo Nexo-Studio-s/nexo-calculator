@@ -73,10 +73,6 @@ class NexoCalculator(tk.Tk):
 
     def create_interface(self):
 
-        # ----------------------------------------------------
-        # Header
-        # ----------------------------------------------------
-
         header = tk.Frame(
             self,
             bg="#111111"
@@ -268,24 +264,17 @@ class NexoCalculator(tk.Tk):
     # CALCULATOR
     # ========================================================
 
-    def button_pressed(
-        self,
-        value
-    ):
+    def button_pressed(self, value):
 
         if value == "C":
-
             self.display.delete(
                 0,
                 tk.END
             )
-
             return
 
         if value == "=":
-
             self.calculate()
-
             return
 
         self.display.insert(
@@ -304,16 +293,13 @@ class NexoCalculator(tk.Tk):
 
         try:
 
-            # Beperk eval tot eenvoudige rekenkundige
-            # expressies.
             allowed_characters = (
                 "0123456789"
                 "+-*/(). "
             )
 
             if any(
-                character
-                not in allowed_characters
+                character not in allowed_characters
                 for character in expression
             ):
                 raise ValueError
@@ -353,13 +339,6 @@ class NexoCalculator(tk.Tk):
     # ========================================================
 
     def initialize_updates(self):
-        """
-        Start het Update System kort nadat de applicatie
-        zichtbaar is.
-
-        Eerst wordt gecontroleerd of er al een eerder
-        gedownloade update klaarstaat.
-        """
 
         self.after(
             500,
@@ -369,13 +348,6 @@ class NexoCalculator(tk.Tk):
     # ========================================================
 
     def check_pending_update(self):
-        """
-        Controleert of er lokaal al een gedownloade
-        update klaarstaat.
-
-        Daarna wordt altijd een nieuwe GitHub-controle
-        gestart.
-        """
 
         pending = get_pending_update()
 
@@ -387,14 +359,9 @@ class NexoCalculator(tk.Tk):
             )
 
             if version:
-
                 self.show_downloaded_update(
                     version
                 )
-
-        # ----------------------------------------------------
-        # GitHub altijd controleren
-        # ----------------------------------------------------
 
         self.after(
             300,
@@ -404,13 +371,6 @@ class NexoCalculator(tk.Tk):
     # ========================================================
 
     def check_for_updates(self):
-        """
-        Controleert GitHub op een nieuwe release.
-
-        De netwerkcontrole draait in een aparte thread,
-        zodat de calculator niet vastloopt als GitHub
-        langzaam reageert of offline is.
-        """
 
         if self.update_check_running:
             return
@@ -428,10 +388,6 @@ class NexoCalculator(tk.Tk):
             except Exception:
 
                 release = None
-
-            # ------------------------------------------------
-            # Resultaat terugbrengen naar Tkinter-thread
-            # ------------------------------------------------
 
             self.after(
                 0,
@@ -451,9 +407,6 @@ class NexoCalculator(tk.Tk):
         self,
         release
     ):
-        """
-        Verwerkt het resultaat van de GitHub-controle.
-        """
 
         self.update_check_running = False
 
@@ -467,10 +420,6 @@ class NexoCalculator(tk.Tk):
 
         if not version:
             return
-
-        # ----------------------------------------------------
-        # UPDATE POPUP
-        # ----------------------------------------------------
 
         self.show_update_available(
             version,
@@ -486,12 +435,7 @@ class NexoCalculator(tk.Tk):
         version,
         release
     ):
-        """
-        Toont een popup wanneer een nieuwere release
-        beschikbaar is.
-        """
 
-        # Voorkom dubbele update-popups
         if self.update_dialog_open:
             return
 
@@ -520,7 +464,7 @@ class NexoCalculator(tk.Tk):
         )
 
         popup.geometry(
-            "430x300"
+            "450x330"
         )
 
         popup.resizable(
@@ -551,7 +495,10 @@ class NexoCalculator(tk.Tk):
             except tk.TclError:
                 pass
 
-            popup.destroy()
+            try:
+                popup.destroy()
+            except tk.TclError:
+                pass
 
         popup.protocol(
             "WM_DELETE_WINDOW",
@@ -584,9 +531,7 @@ class NexoCalculator(tk.Tk):
 
         version_text = tk.Label(
             popup,
-            text=(
-                f"Nieuwe versie: {version}"
-            ),
+            text=f"Nieuwe versie: {version}",
             font=(
                 "Segoe UI",
                 13,
@@ -640,7 +585,7 @@ class NexoCalculator(tk.Tk):
                 ),
                 fg="#999999",
                 bg="#111111",
-                wraplength=370,
+                wraplength=390,
                 justify="center"
             )
 
@@ -682,6 +627,10 @@ class NexoCalculator(tk.Tk):
             pady=5
         )
 
+        # ----------------------------------------------------
+        # DOWNLOAD
+        # ----------------------------------------------------
+
         def download():
 
             download_button.config(
@@ -721,7 +670,7 @@ class NexoCalculator(tk.Tk):
 
         download_button = tk.Button(
             button_frame,
-            text="Downloaden",
+            text="Download nu",
             font=(
                 "Segoe UI",
                 10,
@@ -732,8 +681,10 @@ class NexoCalculator(tk.Tk):
             activebackground="#ff8c26",
             activeforeground="white",
             bd=0,
-            padx=18,
-            pady=8,
+            relief="flat",
+            padx=22,
+            pady=9,
+            cursor="hand2",
             command=download
         )
 
@@ -743,6 +694,8 @@ class NexoCalculator(tk.Tk):
             padx=5
         )
 
+        # ----------------------------------------------------
+        # LATER
         # ----------------------------------------------------
 
         later_button = tk.Button(
@@ -757,8 +710,10 @@ class NexoCalculator(tk.Tk):
             activebackground="#383838",
             activeforeground="white",
             bd=0,
-            padx=18,
-            pady=8,
+            relief="flat",
+            padx=22,
+            pady=9,
+            cursor="hand2",
             command=close_popup
         )
 
@@ -778,23 +733,16 @@ class NexoCalculator(tk.Tk):
         version,
         success
     ):
-        """
-        Verwerkt het resultaat van de download.
-        """
 
         self.update_dialog_open = False
 
         try:
-
             popup.grab_release()
-
         except tk.TclError:
             pass
 
         try:
-
             popup.destroy()
-
         except tk.TclError:
             pass
 
@@ -825,10 +773,6 @@ class NexoCalculator(tk.Tk):
         self,
         version
     ):
-        """
-        Toont dat de update klaarstaat om geïnstalleerd
-        te worden.
-        """
 
         result = messagebox.askyesno(
             "Update klaar",
