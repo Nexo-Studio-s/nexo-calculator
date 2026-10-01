@@ -1,169 +1,476 @@
-import sys
-import platform
-
-import customtkinter as ctk
+import threading
+import tkinter as tk
 from tkinter import messagebox
-
-from Calculate.calculator import Calculator
-from Input.input import CalculatorInput
-from NOTsoDRIVERS.keyboard import CalculatorKeyboard
-from UserInterface.ui import CalculatorUI
 
 from Updates.update_manager import (
     get_latest_release,
     download_update,
     get_pending_update,
-    install_and_restart
+    install_and_restart,
 )
 
 
 # ============================================================
-# Nexo Calculator
-# Public Version:  v0.2026.00009
-# Internal Build:  INT01
+# NEXO CALCULATOR VERSION
 # ============================================================
 
 PUBLIC_VERSION = "0.2026.00009"
 INTERNAL_BUILD = "INT01"
 
 
-ctk.set_appearance_mode("Dark")
-ctk.set_default_color_theme("blue")
+# ============================================================
+# NEXO CALCULATOR
+# ============================================================
 
-
-class NexoCalculator(ctk.CTk):
-
-    MIN_PYTHON_VERSION = (3, 8)
-    MIN_WIN_VERSION = 10
-
-    ERROR_MESSAGES = [
-        "Error",
-        "Cannot divide by zero"
-    ]
+class NexoCalculator(tk.Tk):
 
     def __init__(self):
         super().__init__()
 
-        if not self.check_system_requirements():
-            self.destroy()
-            sys.exit(1)
+        # ----------------------------------------------------
+        # Window
+        # ----------------------------------------------------
 
         self.title(
-            f"NEXO CALCULATOR v{PUBLIC_VERSION}"
+            f"Nexo Calculator v{PUBLIC_VERSION}"
         )
 
-        self.geometry("360x540")
-        self.minsize(300, 450)
+        self.geometry(
+            "420x600"
+        )
+
+        self.minsize(
+            360,
+            500
+        )
 
         self.configure(
-            fg_color="#0d1117"
+            bg="#111111"
         )
 
-        self.grid_rowconfigure(0, weight=2)
+        # ----------------------------------------------------
+        # Update System state
+        # ----------------------------------------------------
 
-        for i in range(1, 7):
-            self.grid_rowconfigure(i, weight=1)
+        self.update_check_running = False
+        self.update_dialog_open = False
 
-        for j in range(4):
-            self.grid_columnconfigure(j, weight=1)
+        # ----------------------------------------------------
+        # Build interface
+        # ----------------------------------------------------
 
-        self.input_box = ctk.CTkEntry(
-            self,
-            font=("Consolas", 26, "bold"),
-            justify="right",
-            height=65,
-            corner_radius=12,
-            fg_color="#161b22",
-            border_color="#30363d",
-            border_width=1,
-            text_color="#f0f6fc"
-        )
+        self.create_interface()
 
-        self.input_box.grid(
-            row=0,
-            column=0,
-            columnspan=4,
-            sticky="nsew",
-            padx=15,
-            pady=15
-        )
-
-        self.calculator = Calculator(
-            error_messages=self.ERROR_MESSAGES
-        )
-
-        self.calculator_input = CalculatorInput(
-            input_box=self.input_box,
-            error_messages=self.ERROR_MESSAGES
-        )
-
-        self.calculator_input.set_calculator(
-            self.calculator
-        )
-
-        self.calculator_keyboard = CalculatorKeyboard(
-            calculator_input=self.calculator_input
-        )
-
-        self.ui = CalculatorUI(
-            app=self,
-            input_box=self.input_box,
-            calculator=self.calculator,
-            calculator_input=self.calculator_input
-        )
-
-        self.ui.create_buttons()
-
-        self.bind(
-            "<Return>",
-            lambda event: self.calculator_input.answer()
-        )
-
-        self.bind(
-            "<Key>",
-            self.calculator_keyboard.validate_keyboard
-        )
-
+        # ----------------------------------------------------
         # Nexo Studios Update System
+        # ----------------------------------------------------
+
         self.initialize_updates()
 
     # ========================================================
-    # Nexo Studios Update System
+    # USER INTERFACE
+    # ========================================================
+
+    def create_interface(self):
+
+        # ----------------------------------------------------
+        # Header
+        # ----------------------------------------------------
+
+        header = tk.Frame(
+            self,
+            bg="#111111"
+        )
+
+        header.pack(
+            fill="x",
+            padx=20,
+            pady=(20, 10)
+        )
+
+        title = tk.Label(
+            header,
+            text="Nexo Calculator",
+            font=(
+                "Segoe UI",
+                24,
+                "bold"
+            ),
+            fg="#ff7a00",
+            bg="#111111"
+        )
+
+        title.pack()
+
+        version_label = tk.Label(
+            header,
+            text=(
+                f"v{PUBLIC_VERSION} • "
+                f"{INTERNAL_BUILD}"
+            ),
+            font=(
+                "Segoe UI",
+                10
+            ),
+            fg="#aaaaaa",
+            bg="#111111"
+        )
+
+        version_label.pack(
+            pady=(2, 0)
+        )
+
+        # ----------------------------------------------------
+        # Display
+        # ----------------------------------------------------
+
+        display_frame = tk.Frame(
+            self,
+            bg="#1c1c1c",
+            highlightthickness=1,
+            highlightbackground="#333333"
+        )
+
+        display_frame.pack(
+            fill="x",
+            padx=20,
+            pady=15
+        )
+
+        self.display = tk.Entry(
+            display_frame,
+            font=(
+                "Segoe UI",
+                28
+            ),
+            justify="right",
+            bd=0,
+            relief="flat",
+            bg="#1c1c1c",
+            fg="white",
+            insertbackground="white"
+        )
+
+        self.display.pack(
+            fill="x",
+            padx=15,
+            pady=20
+        )
+
+        # ----------------------------------------------------
+        # Buttons
+        # ----------------------------------------------------
+
+        buttons_frame = tk.Frame(
+            self,
+            bg="#111111"
+        )
+
+        buttons_frame.pack(
+            expand=True,
+            fill="both",
+            padx=20,
+            pady=10
+        )
+
+        buttons = [
+            ("7", 0, 0),
+            ("8", 0, 1),
+            ("9", 0, 2),
+            ("/", 0, 3),
+
+            ("4", 1, 0),
+            ("5", 1, 1),
+            ("6", 1, 2),
+            ("*", 1, 3),
+
+            ("1", 2, 0),
+            ("2", 2, 1),
+            ("3", 2, 2),
+            ("-", 2, 3),
+
+            ("0", 3, 0),
+            (".", 3, 1),
+            ("=", 3, 2),
+            ("+", 3, 3),
+
+            ("C", 4, 0),
+        ]
+
+        for text, row, column in buttons:
+
+            button = tk.Button(
+                buttons_frame,
+                text=text,
+                font=(
+                    "Segoe UI",
+                    16,
+                    "bold"
+                ),
+                bg=(
+                    "#ff7a00"
+                    if text == "="
+                    else "#242424"
+                ),
+                fg="white",
+                activebackground="#ff8c26",
+                activeforeground="white",
+                bd=0,
+                relief="flat",
+                command=lambda value=text: (
+                    self.button_pressed(value)
+                )
+            )
+
+            button.grid(
+                row=row,
+                column=column,
+                sticky="nsew",
+                padx=4,
+                pady=4
+            )
+
+        for row in range(5):
+            buttons_frame.rowconfigure(
+                row,
+                weight=1
+            )
+
+        for column in range(4):
+            buttons_frame.columnconfigure(
+                column,
+                weight=1
+            )
+
+        # ----------------------------------------------------
+        # Footer
+        # ----------------------------------------------------
+
+        footer = tk.Label(
+            self,
+            text=(
+                "Nexo Studios • "
+                "Building Tomorrow Together"
+            ),
+            font=(
+                "Segoe UI",
+                9
+            ),
+            fg="#666666",
+            bg="#111111"
+        )
+
+        footer.pack(
+            pady=(5, 15)
+        )
+
+    # ========================================================
+    # CALCULATOR
+    # ========================================================
+
+    def button_pressed(
+        self,
+        value
+    ):
+
+        if value == "C":
+
+            self.display.delete(
+                0,
+                tk.END
+            )
+
+            return
+
+        if value == "=":
+
+            self.calculate()
+
+            return
+
+        self.display.insert(
+            tk.END,
+            value
+        )
+
+    # ========================================================
+
+    def calculate(self):
+
+        expression = self.display.get()
+
+        if not expression:
+            return
+
+        try:
+
+            # Beperk eval tot eenvoudige rekenkundige
+            # expressies.
+            allowed_characters = (
+                "0123456789"
+                "+-*/(). "
+            )
+
+            if any(
+                character
+                not in allowed_characters
+                for character in expression
+            ):
+                raise ValueError
+
+            result = eval(
+                expression,
+                {
+                    "__builtins__": {}
+                },
+                {}
+            )
+
+            self.display.delete(
+                0,
+                tk.END
+            )
+
+            self.display.insert(
+                0,
+                str(result)
+            )
+
+        except Exception:
+
+            self.display.delete(
+                0,
+                tk.END
+            )
+
+            self.display.insert(
+                0,
+                "Error"
+            )
+
+    # ========================================================
+    # NEXO STUDIOS UPDATE SYSTEM
     # ========================================================
 
     def initialize_updates(self):
-        """Check for pending and available updates."""
+        """
+        Start het Update System kort nadat de applicatie
+        zichtbaar is.
+
+        Eerst wordt gecontroleerd of er al een eerder
+        gedownloade update klaarstaat.
+        """
+
+        self.after(
+            500,
+            self.check_pending_update
+        )
+
+    # ========================================================
+
+    def check_pending_update(self):
+        """
+        Controleert of er lokaal al een gedownloade
+        update klaarstaat.
+
+        Daarna wordt altijd een nieuwe GitHub-controle
+        gestart.
+        """
 
         pending = get_pending_update()
 
         if pending:
-            self.after(
-                500,
-                lambda: self.show_downloaded_update(
-                    pending["version"]
-                )
+
+            version = pending.get(
+                "version",
+                ""
             )
-            return
+
+            if version:
+
+                self.show_downloaded_update(
+                    version
+                )
+
+        # ----------------------------------------------------
+        # GitHub altijd controleren
+        # ----------------------------------------------------
 
         self.after(
-            1000,
+            300,
             self.check_for_updates
         )
 
+    # ========================================================
+
     def check_for_updates(self):
-        """Check GitHub Releases for a newer Nexo version."""
+        """
+        Controleert GitHub op een nieuwe release.
 
-        release = get_latest_release(
-            PUBLIC_VERSION
-        )
+        De netwerkcontrole draait in een aparte thread,
+        zodat de calculator niet vastloopt als GitHub
+        langzaam reageert of offline is.
+        """
 
-        if release is None:
+        if self.update_check_running:
             return
 
-        version = release.get(
-            "tag_name",
-            ""
+        self.update_check_running = True
+
+        def update_check_worker():
+
+            try:
+
+                release = get_latest_release(
+                    PUBLIC_VERSION
+                )
+
+            except Exception:
+
+                release = None
+
+            # ------------------------------------------------
+            # Resultaat terugbrengen naar Tkinter-thread
+            # ------------------------------------------------
+
+            self.after(
+                0,
+                lambda: self.process_update_result(
+                    release
+                )
+            )
+
+        threading.Thread(
+            target=update_check_worker,
+            daemon=True
+        ).start()
+
+    # ========================================================
+
+    def process_update_result(
+        self,
+        release
+    ):
+        """
+        Verwerkt het resultaat van de GitHub-controle.
+        """
+
+        self.update_check_running = False
+
+        if not release:
+            return
+
+        version = (
+            release.get("tag_name")
+            or ""
         )
+
+        if not version:
+            return
+
+        # ----------------------------------------------------
+        # UPDATE POPUP
+        # ----------------------------------------------------
 
         self.show_update_available(
             version,
@@ -171,7 +478,7 @@ class NexoCalculator(ctk.CTk):
         )
 
     # ========================================================
-    # Update Available
+    # UPDATE AVAILABLE POPUP
     # ========================================================
 
     def show_update_available(
@@ -179,226 +486,390 @@ class NexoCalculator(ctk.CTk):
         version,
         release
     ):
-        """Show the available update dialog."""
+        """
+        Toont een popup wanneer een nieuwere release
+        beschikbaar is.
+        """
 
-        dialog = ctk.CTkToplevel(self)
+        # Voorkom dubbele update-popups
+        if self.update_dialog_open:
+            return
 
-        dialog.title(
+        self.update_dialog_open = True
+
+        release_name = (
+            release.get("name")
+            or version
+        )
+
+        release_body = (
+            release.get("body")
+            or ""
+        ).strip()
+
+        # ----------------------------------------------------
+        # Popup
+        # ----------------------------------------------------
+
+        popup = tk.Toplevel(
+            self
+        )
+
+        popup.title(
             "Nexo Calculator Update"
         )
 
-        dialog.geometry(
-            "420x250"
+        popup.geometry(
+            "430x300"
         )
 
-        dialog.resizable(
+        popup.resizable(
             False,
             False
         )
 
-        dialog.transient(self)
-        dialog.grab_set()
-
-        ctk.CTkLabel(
-            dialog,
-            text="Update available",
-            font=("Arial", 22, "bold")
-        ).pack(
-            pady=(25, 10)
+        popup.configure(
+            bg="#111111"
         )
 
-        ctk.CTkLabel(
-            dialog,
-            text=(
-                "A new version of Nexo Calculator "
-                "is available:\n\n"
-                f"{version}"
+        popup.transient(
+            self
+        )
+
+        popup.grab_set()
+
+        # ----------------------------------------------------
+        # Sluiten
+        # ----------------------------------------------------
+
+        def close_popup():
+
+            self.update_dialog_open = False
+
+            try:
+                popup.grab_release()
+            except tk.TclError:
+                pass
+
+            popup.destroy()
+
+        popup.protocol(
+            "WM_DELETE_WINDOW",
+            close_popup
+        )
+
+        # ----------------------------------------------------
+        # Titel
+        # ----------------------------------------------------
+
+        title = tk.Label(
+            popup,
+            text="Update beschikbaar!",
+            font=(
+                "Segoe UI",
+                20,
+                "bold"
             ),
-            font=("Arial", 15)
-        ).pack(
-            pady=10
+            fg="#ff7a00",
+            bg="#111111"
         )
 
-        buttons = ctk.CTkFrame(
-            dialog,
-            fg_color="transparent"
+        title.pack(
+            pady=(25, 8)
         )
 
-        buttons.pack(
-            pady=15
+        # ----------------------------------------------------
+        # Versie
+        # ----------------------------------------------------
+
+        version_text = tk.Label(
+            popup,
+            text=(
+                f"Nieuwe versie: {version}"
+            ),
+            font=(
+                "Segoe UI",
+                13,
+                "bold"
+            ),
+            fg="white",
+            bg="#111111"
+        )
+
+        version_text.pack()
+
+        # ----------------------------------------------------
+        # Release naam
+        # ----------------------------------------------------
+
+        release_text = tk.Label(
+            popup,
+            text=release_name,
+            font=(
+                "Segoe UI",
+                10
+            ),
+            fg="#bbbbbb",
+            bg="#111111"
+        )
+
+        release_text.pack(
+            pady=(3, 10)
+        )
+
+        # ----------------------------------------------------
+        # Release notes
+        # ----------------------------------------------------
+
+        if release_body:
+
+            notes = release_body
+
+            if len(notes) > 220:
+                notes = (
+                    notes[:220]
+                    + "..."
+                )
+
+            notes_label = tk.Label(
+                popup,
+                text=notes,
+                font=(
+                    "Segoe UI",
+                    9
+                ),
+                fg="#999999",
+                bg="#111111",
+                wraplength=370,
+                justify="center"
+            )
+
+            notes_label.pack(
+                padx=25,
+                pady=(0, 15)
+            )
+
+        else:
+
+            no_notes = tk.Label(
+                popup,
+                text=(
+                    "Er zijn nieuwe verbeteringen "
+                    "beschikbaar."
+                ),
+                font=(
+                    "Segoe UI",
+                    9
+                ),
+                fg="#999999",
+                bg="#111111"
+            )
+
+            no_notes.pack(
+                pady=(0, 15)
+            )
+
+        # ----------------------------------------------------
+        # Buttons
+        # ----------------------------------------------------
+
+        button_frame = tk.Frame(
+            popup,
+            bg="#111111"
+        )
+
+        button_frame.pack(
+            pady=5
         )
 
         def download():
-            dialog.destroy()
 
-            success = download_update(
-                release
+            download_button.config(
+                state="disabled",
+                text="Downloaden..."
             )
 
-            if success:
-                self.show_downloaded_update(
-                    version
-                )
-            else:
-                messagebox.showerror(
-                    "Update Error",
-                    "The update could not be downloaded."
+            later_button.config(
+                state="disabled"
+            )
+
+            def worker():
+
+                try:
+
+                    success = download_update(
+                        release
+                    )
+
+                except Exception:
+
+                    success = False
+
+                self.after(
+                    0,
+                    lambda: self.finish_download(
+                        popup,
+                        version,
+                        success
+                    )
                 )
 
-        def later():
-            dialog.destroy()
+            threading.Thread(
+                target=worker,
+                daemon=True
+            ).start()
 
-        ctk.CTkButton(
-            buttons,
-            text="Download Now",
-            width=160,
+        download_button = tk.Button(
+            button_frame,
+            text="Downloaden",
+            font=(
+                "Segoe UI",
+                10,
+                "bold"
+            ),
+            bg="#ff7a00",
+            fg="white",
+            activebackground="#ff8c26",
+            activeforeground="white",
+            bd=0,
+            padx=18,
+            pady=8,
             command=download
-        ).grid(
-            row=0,
-            column=0,
-            padx=8
         )
 
-        ctk.CTkButton(
-            buttons,
-            text="Notify me Later",
-            width=160,
-            command=later
-        ).grid(
+        download_button.grid(
+            row=0,
+            column=0,
+            padx=5
+        )
+
+        # ----------------------------------------------------
+
+        later_button = tk.Button(
+            button_frame,
+            text="Later",
+            font=(
+                "Segoe UI",
+                10
+            ),
+            bg="#292929",
+            fg="white",
+            activebackground="#383838",
+            activeforeground="white",
+            bd=0,
+            padx=18,
+            pady=8,
+            command=close_popup
+        )
+
+        later_button.grid(
             row=0,
             column=1,
-            padx=8
+            padx=5
         )
 
     # ========================================================
-    # Downloaded Update
+    # DOWNLOAD FINISHED
+    # ========================================================
+
+    def finish_download(
+        self,
+        popup,
+        version,
+        success
+    ):
+        """
+        Verwerkt het resultaat van de download.
+        """
+
+        self.update_dialog_open = False
+
+        try:
+
+            popup.grab_release()
+
+        except tk.TclError:
+            pass
+
+        try:
+
+            popup.destroy()
+
+        except tk.TclError:
+            pass
+
+        if not success:
+
+            messagebox.showerror(
+                "Nexo Calculator Update",
+                (
+                    "De update kon niet worden "
+                    "gedownload.\n\n"
+                    "Controleer je internetverbinding "
+                    "en probeer het later opnieuw."
+                ),
+                parent=self
+            )
+
+            return
+
+        self.show_downloaded_update(
+            version
+        )
+
+    # ========================================================
+    # UPDATE DOWNLOADED
     # ========================================================
 
     def show_downloaded_update(
         self,
         version
     ):
-        """Show the pending installation dialog."""
+        """
+        Toont dat de update klaarstaat om geïnstalleerd
+        te worden.
+        """
 
-        dialog = ctk.CTkToplevel(self)
-
-        dialog.title(
-            "Nexo Calculator Update"
-        )
-
-        dialog.geometry(
-            "440x250"
-        )
-
-        dialog.resizable(
-            False,
-            False
-        )
-
-        dialog.transient(self)
-        dialog.grab_set()
-
-        ctk.CTkLabel(
-            dialog,
-            text="Update downloaded",
-            font=("Arial", 22, "bold")
-        ).pack(
-            pady=(25, 10)
-        )
-
-        ctk.CTkLabel(
-            dialog,
-            text=(
-                f"{version} has been "
-                "downloaded for you."
+        result = messagebox.askyesno(
+            "Update klaar",
+            (
+                f"Nexo Calculator {version} "
+                "is gedownload.\n\n"
+                "Wil je de update nu installeren "
+                "en Nexo Calculator opnieuw starten?"
             ),
-            font=("Arial", 15)
-        ).pack(
-            pady=15
+            parent=self
         )
 
-        buttons = ctk.CTkFrame(
-            dialog,
-            fg_color="transparent"
-        )
+        if not result:
+            return
 
-        buttons.pack(
-            pady=15
-        )
+        success = install_and_restart()
 
-        def install():
-            success = install_and_restart()
+        if success:
 
-            if success:
-                dialog.destroy()
-                self.destroy()
+            self.destroy()
 
-        def later():
-            dialog.destroy()
+        else:
 
-        ctk.CTkButton(
-            buttons,
-            text="Install & Restart now",
-            width=180,
-            command=install
-        ).grid(
-            row=0,
-            column=0,
-            padx=8
-        )
-
-        ctk.CTkButton(
-            buttons,
-            text="Notify me later",
-            width=160,
-            command=later
-        ).grid(
-            row=0,
-            column=1,
-            padx=8
-        )
-
-    # ========================================================
-    # System Requirements
-    # ========================================================
-
-    def check_system_requirements(self) -> bool:
-        """Check minimum Python and OS requirements."""
-
-        if sys.version_info < self.MIN_PYTHON_VERSION:
             messagebox.showerror(
-                "System Error",
-                f"Python "
-                f"{self.MIN_PYTHON_VERSION[0]}."
-                f"{self.MIN_PYTHON_VERSION[1]} "
-                f"or newer is required!"
+                "Installatie mislukt",
+                (
+                    "De update kon niet worden "
+                    "geïnstalleerd.\n\n"
+                    "Probeer de applicatie opnieuw "
+                    "te starten."
+                ),
+                parent=self
             )
 
-            return False
 
-        os_name = platform.system()
+# ============================================================
+# APPLICATION START
+# ============================================================
 
-        if os_name == "Windows":
-            try:
-                win_ver = int(
-                    platform.release()
-                )
+if __name__ == "__main__":
 
-                if win_ver < self.MIN_WIN_VERSION:
-                    messagebox.showwarning(
-                        "Compatibility Warning",
-                        f"Nexo Calculator is optimized "
-                        f"for Windows "
-                        f"{self.MIN_WIN_VERSION}+."
-                    )
+    app = NexoCalculator()
 
-            except ValueError:
-                pass
-
-        elif os_name == "Darwin":
-            pass
-
-        elif os_name == "Linux":
-            pass
-
-        return True
+    app.mainloop()
