@@ -1,0 +1,23 @@
+--- a/SOURCE/app.py
++++ b/SOURCE/app.py
+@@
+     def check_pending_update(self):
+ 
+         pending = get_pending_update()
+ 
+         if pending:
+@@
+             if version:
+                 self.show_downloaded_update(
+                     version
+                 )
++
++            # Do not immediately offer the same release again when the
++            # user chooses to install later. The pending update is already
++            # available and will be offered again on the next startup.
++            return
+ 
+         self.after(
+             300,
+             self.check_for_updates
+         )
