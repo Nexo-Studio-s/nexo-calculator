@@ -2,50 +2,35 @@
 Nexo Studios Update System
 Nexo Calculator
 
-Checks GitHub Releases on every application startup.
-
-Official version examples:
-    v0.2026.00008
-    v0.2026.00009-PR
+Checks published GitHub Releases, downloads verified update assets,
+stores pending-update metadata, and installs updates on Windows.
 """
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import shutil
 import subprocess
 import sys
-import time
 import urllib.error
+import urllib.parse
 import urllib.request
+import re
 from pathlib import Path
 from typing import Optional
-import re
 
-
-# ============================================================
-# Nexo Studios Update Configuration
-# ============================================================
 
 GITHUB_OWNER = "Nexo-Studio-s"
 GITHUB_REPOSITORY = "nexo-calculator"
-
 RELEASES_API = (
     f"https://api.github.com/repos/"
-    f"{GITHUB_OWNER}/{GITHUB_REPOSITORY}/releases"
+    f"{GITHUB_OWNER}/{GITHUB_REPOSITORY}/releases?per_page=100"
 )
-
 APPLICATION_NAME = "Nexo Calculator"
 EXECUTABLE_NAME = "NexoCalculator.exe"
-
-# Tijdens de ontwikkelfase mogen prereleases worden gevonden.
 ALLOW_PRERELEASES = True
-
-
-# ============================================================
-# Local Update Storage
-# ============================================================
 
 UPDATE_DIRECTORY = (
     Path(os.environ.get("LOCALAPPDATA", Path.home()))
@@ -53,607 +38,266 @@ UPDATE_DIRECTORY = (
     / "Nexo Calculator"
     / "Updates"
 )
-
-DOWNLOADED_EXECUTABLE = (
-    UPDATE_DIRECTORY / EXECUTABLE_NAME
-)
-
-UPDATE_INFO_FILE = (
-    UPDATE_DIRECTORY / "update.json"
-)
-
-
-# ============================================================
-# Version Handling
-# ============================================================
+DOWNLOADED_EXECUTABLE = UPDATE_DIRECTORY / EXECUTABLE_NAME
+UPDATE_INFO_FILE = UPDATE_DIRECTORY / "update.json"
 
 VERSION_PATTERN = re.compile(
     r"^v?(\d+)\.(\d+)\.(\d+)(?:-([0-9A-Za-z.-]+))?$",
-    re.IGNORECASE
+    re.IGNORECASE,
 )
 
 
-def parse_version(
-    version: str
-) -> Optional[tuple[int, int, int, int]]:
-    """
-    Parse a Nexo version.
-
-    Examples:
-
-        v0.2026.00008
-        -> (0, 2026, 8, 1)
-
-        v0.2026.00009-PR
-        -> (0, 2026, 9, 0)
-
-    The fourth value represents the channel:
-
-        1 = stable
-        0 = prerelease
-    """
-
+def parse_version(version: str) -> Optional[tuple]:
+    """Parse Nexo versions, sorting stable releases after prereleases."""
     if not isinstance(version, str):
         return None
-
-    match = VERSION_PATTERN.fullmatch(
-        version.strip()
-    )
-
+    match = VERSION_PATTERN.fullmatch(version.strip())
     if not match:
         return None
-
-    major = int(match.group(1))
-    year = int(match.group(2))
-    build = int(match.group(3))
-
+    major, year, build = (int(match.group(i)) for i in (1, 2, 3))
     suffix = match.group(4)
-
-    # Stable releases are considered newer than a
-    # prerelease with the exact same version number.
-    is_stable = (
-        1
-        if suffix is None
-        else 0
-    )
-
-    return (
-        major,
-        year,
-        build,
-        is_stable
-    )
+    return major, year, build, 1 if suffix is None else 0, (suffix or "").lower()
 
 
-def is_newer_version(
-    current_version: str,
-    available_version: str
-) -> bool:
-    """
-    Return True only when the available version
-    is newer than the installed version.
-    """
+def is_newer_version(current_version: str, available_version: str) -> bool:
+    """Return True when available_version is newer than current_version."""
+    current = parse_version(current_version)
+    available = parse_version(available_version)
+    return current is not None and available is not None and available > current
 
-    current = parse_version(
-        current_version
-    )
-
-    available = parse_version(
-        available_version
-    )
-
-    if current is None:
-        return False
-
-    if available is None:
-        return False
-
-    return available > current
-
-
-# ============================================================
-# GitHub API
-# ============================================================
 
 def _request_json(url: str):
-    """
-    Request JSON from GitHub.
-
-    No authentication is required because the
-    Nexo Calculator repository is public.
-    """
-
+    """Fetch JSON from GitHub's public API."""
     request = urllib.request.Request(
         url,
         headers={
             "Accept": "application/vnd.github+json",
-            "User-Agent": (
-                "Nexo-Calculator-Update-System"
-            )
-        }
+            "User-Agent": "Nexo-Calculator-Update-System",
+            "X-GitHub-Api-Version": "2022-11-28",
+        },
     )
-
-    with urllib.request.urlopen(
-        request,
-        timeout=10
-    ) as response:
-
-        return json.loads(
-            response.read().decode(
-                "utf-8"
-            )
-        )
+    with urllib.request.urlopen(request, timeout=15) as response:
+        return json.loads(response.read().decode("utf-8"))
 
 
-# ============================================================
-# GitHub Release Detection
-# ============================================================
-
-def get_latest_release(
-    current_version: str
-):
-    """
-    Find the newest published GitHub Release
-    that is newer than the installed version.
-
-    Draft releases are ignored.
-
-    Published prereleases are accepted when
-    ALLOW_PRERELEASES is True.
-    """
-
-    try:
-
-        releases = _request_json(
-            RELEASES_API
-        )
-
-    except (
-        urllib.error.URLError,
-        urllib.error.HTTPError,
-        TimeoutError,
-        OSError,
-        json.JSONDecodeError
-    ):
-
+def get_executable_asset(release):
+    """Return the NexoCalculator.exe asset for a release, if present."""
+    if not isinstance(release, dict):
         return None
-
-    if not isinstance(
-        releases,
-        list
-    ):
+    assets = release.get("assets", [])
+    if not isinstance(assets, list):
         return None
-
-    current = parse_version(
-        current_version
-    )
-
-    if current is None:
-        return None
-
-    newest_release = None
-    newest_version = None
-
-    for release in releases:
-
-        if not isinstance(
-            release,
-            dict
-        ):
-            continue
-
-        # Draft releases are not publicly installable.
-        if release.get(
-            "draft",
-            False
-        ):
-            continue
-
-        # Optional prerelease filtering.
-        if (
-            release.get(
-                "prerelease",
-                False
-            )
-            and not ALLOW_PRERELEASES
-        ):
-            continue
-
-        tag_name = release.get(
-            "tag_name",
-            ""
-        )
-
-        parsed = parse_version(
-            tag_name
-        )
-
-        if parsed is None:
-            continue
-
-        # This is the actual comparison:
-        #
-        # Installed:
-        # v0.2026.00008
-        #
-        # GitHub:
-        # v0.2026.00009-PR
-        #
-        # Result:
-        # UPDATE AVAILABLE
-        if parsed <= current:
-            continue
-
-        if (
-            newest_version is None
-            or parsed > newest_version
-        ):
-            newest_release = release
-            newest_version = parsed
-
-    return newest_release
-
-
-# ============================================================
-# Release Asset
-# ============================================================
-
-def get_executable_asset(
-    release
-):
-    """
-    Find NexoCalculator.exe inside
-    the selected GitHub Release.
-    """
-
-    if not release:
-        return None
-
-    for asset in release.get(
-        "assets",
-        []
-    ):
-
-        if asset.get(
-            "name"
-        ) == EXECUTABLE_NAME:
-
+    for asset in assets:
+        if isinstance(asset, dict) and asset.get("name") == EXECUTABLE_NAME:
             return asset
-
     return None
 
 
-# ============================================================
-# Download
-# ============================================================
-
-def download_update(
-    release
-) -> bool:
-    """
-    Download the executable belonging
-    to the selected release.
-    """
-
-    asset = get_executable_asset(
-        release
-    )
-
-    if not asset:
-        return False
-
-    download_url = asset.get(
-        "browser_download_url"
-    )
-
-    if not download_url:
-        return False
-
-    UPDATE_DIRECTORY.mkdir(
-        parents=True,
-        exist_ok=True
-    )
-
-    temporary_file = (
-        UPDATE_DIRECTORY
-        / f"{EXECUTABLE_NAME}.download"
-    )
-
+def get_latest_release(current_version: str):
+    """Find the newest eligible published release with a downloadable EXE."""
+    current = parse_version(current_version)
+    if current is None:
+        return None
     try:
-
-        request = urllib.request.Request(
-            download_url,
-            headers={
-                "User-Agent":
-                    "Nexo-Calculator-Update-System"
-            }
-        )
-
-        with urllib.request.urlopen(
-            request,
-            timeout=60
-        ) as response, open(
-            temporary_file,
-            "wb"
-        ) as output:
-
-            shutil.copyfileobj(
-                response,
-                output
-            )
-
-        if not temporary_file.exists():
-            return False
-
-        if (
-            temporary_file.stat().st_size
-            <= 0
-        ):
-
-            temporary_file.unlink(
-                missing_ok=True
-            )
-
-            return False
-
-        temporary_file.replace(
-            DOWNLOADED_EXECUTABLE
-        )
-
-        update_information = {
-
-            "version":
-                release.get(
-                    "tag_name"
-                ),
-
-            "name":
-                release.get(
-                    "name",
-                    release.get(
-                        "tag_name"
-                    )
-                ),
-
-            "release_url":
-                release.get(
-                    "html_url",
-                    ""
-                ),
-
-            "downloaded":
-                True,
-
-            "executable":
-                str(
-                    DOWNLOADED_EXECUTABLE
-                )
-        }
-
-        UPDATE_INFO_FILE.write_text(
-            json.dumps(
-                update_information,
-                indent=4
-            ),
-            encoding="utf-8"
-        )
-
-        return True
-
+        releases = _request_json(RELEASES_API)
     except (
         urllib.error.URLError,
         urllib.error.HTTPError,
         TimeoutError,
-        OSError
+        OSError,
+        json.JSONDecodeError,
     ):
+        return None
+    if not isinstance(releases, list):
+        return None
 
-        temporary_file.unlink(
-            missing_ok=True
-        )
+    candidates = []
+    for release in releases:
+        if not isinstance(release, dict) or release.get("draft", False):
+            continue
+        if release.get("prerelease", False) and not ALLOW_PRERELEASES:
+            continue
+        version = parse_version(release.get("tag_name", ""))
+        if version is None or version <= current:
+            continue
+        if not get_executable_asset(release):
+            continue
+        candidates.append((version, release))
+    return max(candidates, key=lambda candidate: candidate[0])[1] if candidates else None
 
+
+def _valid_download_url(url: str) -> bool:
+    """Only download release assets from HTTPS URLs."""
+    try:
+        parsed = urllib.parse.urlparse(url)
+        return parsed.scheme == "https" and bool(parsed.netloc)
+    except (TypeError, ValueError):
         return False
 
 
-# ============================================================
-# Pending Update
-# ============================================================
+def download_update(release) -> bool:
+    """Download and verify the selected release executable atomically."""
+    asset = get_executable_asset(release)
+    if not asset:
+        return False
+    download_url = asset.get("browser_download_url")
+    if not isinstance(download_url, str) or not _valid_download_url(download_url):
+        return False
 
-def get_pending_update():
-    """
-    Return information about an update that
-    has already been downloaded.
-    """
-
-    if not UPDATE_INFO_FILE.exists():
-        return None
-
-    if not DOWNLOADED_EXECUTABLE.exists():
-
-        clear_pending_update()
-
-        return None
+    UPDATE_DIRECTORY.mkdir(parents=True, exist_ok=True)
+    temporary_file = UPDATE_DIRECTORY / f"{EXECUTABLE_NAME}.download"
+    temporary_info = UPDATE_DIRECTORY / "update.json.tmp"
 
     try:
-
-        data = json.loads(
-            UPDATE_INFO_FILE.read_text(
-                encoding="utf-8"
-            )
+        temporary_file.unlink(missing_ok=True)
+        request = urllib.request.Request(
+            download_url,
+            headers={"User-Agent": "Nexo-Calculator-Update-System"},
         )
+        digest = hashlib.sha256()
+        downloaded_size = 0
+        with urllib.request.urlopen(request, timeout=90) as response, temporary_file.open("wb") as output:
+            while True:
+                chunk = response.read(1024 * 1024)
+                if not chunk:
+                    break
+                output.write(chunk)
+                digest.update(chunk)
+                downloaded_size += len(chunk)
 
+        if downloaded_size <= 0:
+            raise OSError("The downloaded update is empty.")
+        expected_size = asset.get("size")
+        if isinstance(expected_size, int) and expected_size > 0 and downloaded_size != expected_size:
+            raise OSError("The downloaded file size does not match the release asset.")
+        expected_digest = asset.get("digest")
+        if isinstance(expected_digest, str) and expected_digest.startswith("sha256:"):
+            if digest.hexdigest().lower() != expected_digest.split(":", 1)[1].lower():
+                raise OSError("The downloaded update failed SHA-256 verification.")
+
+        version = release.get("tag_name")
+        if not version or parse_version(version) is None:
+            raise OSError("The release has an invalid version tag.")
+
+        temporary_file.replace(DOWNLOADED_EXECUTABLE)
+        update_information = {
+            "version": version,
+            "name": release.get("name") or version,
+            "release_url": release.get("html_url", ""),
+            "downloaded": True,
+            "executable": str(DOWNLOADED_EXECUTABLE),
+            "sha256": digest.hexdigest(),
+            "size": downloaded_size,
+        }
+        temporary_info.write_text(json.dumps(update_information, indent=4), encoding="utf-8")
+        temporary_info.replace(UPDATE_INFO_FILE)
+        return True
     except (
+        urllib.error.URLError,
+        urllib.error.HTTPError,
+        TimeoutError,
         OSError,
-        json.JSONDecodeError
+        json.JSONDecodeError,
     ):
+        temporary_file.unlink(missing_ok=True)
+        temporary_info.unlink(missing_ok=True)
+        return False
 
+
+def get_pending_update():
+    """Return valid metadata for an update already downloaded to disk."""
+    if not UPDATE_INFO_FILE.is_file() or not DOWNLOADED_EXECUTABLE.is_file():
         clear_pending_update()
-
         return None
-
-    version = data.get(
-        "version"
-    )
-
-    if (
-        not version
-        or parse_version(version)
-        is None
-    ):
-
+    try:
+        data = json.loads(UPDATE_INFO_FILE.read_text(encoding="utf-8"))
+        version = data.get("version") if isinstance(data, dict) else None
+        if not version or parse_version(version) is None:
+            raise ValueError("Invalid pending update metadata.")
+        expected_digest = data.get("sha256")
+        if expected_digest:
+            digest = hashlib.sha256()
+            with DOWNLOADED_EXECUTABLE.open("rb") as executable:
+                for chunk in iter(lambda: executable.read(1024 * 1024), b""):
+                    digest.update(chunk)
+            if digest.hexdigest().lower() != str(expected_digest).lower():
+                raise ValueError("Pending update checksum mismatch.")
+        return data
+    except (OSError, ValueError, json.JSONDecodeError, AttributeError):
         clear_pending_update()
-
         return None
-
-    return data
 
 
 def clear_pending_update():
-    """
-    Remove downloaded update files.
-    """
+    """Remove pending update files without failing if they are absent."""
+    for path in (DOWNLOADED_EXECUTABLE, UPDATE_INFO_FILE, UPDATE_DIRECTORY / "update.json.tmp"):
+        try:
+            path.unlink(missing_ok=True)
+        except OSError:
+            pass
 
-    DOWNLOADED_EXECUTABLE.unlink(
-        missing_ok=True
-    )
-
-    UPDATE_INFO_FILE.unlink(
-        missing_ok=True
-    )
-
-
-# ============================================================
-# Install
-# ============================================================
 
 def install_and_restart() -> bool:
-    """
-    Start the temporary updater.
-
-    The helper waits until the current application
-    has exited, replaces the executable and starts
-    the new version.
-    """
-
+    """Use a separate PowerShell process to replace and restart the packaged EXE."""
     pending = get_pending_update()
-
-    if not pending:
+    if not pending or not getattr(sys, "frozen", False) or os.name != "nt":
         return False
 
-    downloaded = Path(
-        pending["executable"]
-    )
-
-    current_executable = Path(
-        sys.executable
-    )
-
-    if not downloaded.exists():
-
-        clear_pending_update()
-
+    downloaded = Path(pending.get("executable", ""))
+    current_executable = Path(sys.executable)
+    if not downloaded.is_file() or not current_executable.is_file():
         return False
 
-    # Self replacement only works for the
-    # packaged NexoCalculator.exe.
-    if not getattr(
-        sys,
-        "frozen",
-        False
-    ):
-
+    powershell = shutil.which("powershell.exe") or shutil.which("powershell")
+    if not powershell:
         return False
 
-    helper_script = (
-        UPDATE_DIRECTORY
-        / "install_update.py"
-    )
-
-    helper_script.write_text(
-        """
-import os
-import shutil
-import subprocess
-import sys
-import time
-
-
-pid = int(sys.argv[1])
-
-source = sys.argv[2]
-
-target = sys.argv[3]
-
-
-# Wait for Nexo Calculator to close.
-while True:
-
-    try:
-
-        os.kill(
-            pid,
-            0
-        )
-
-        time.sleep(
-            0.5
-        )
-
-    except OSError:
-
-        break
-
-
-# Replace the old executable.
-try:
-
-    shutil.copy2(
-        source,
-        target
-    )
-
-except Exception:
-
-    sys.exit(1)
-
-
-# Remove downloaded copy.
-try:
-
-    os.remove(
-        source
-    )
-
-except OSError:
-
-    pass
-
-
-# Start the new Nexo Calculator.
-subprocess.Popen(
-    [target],
-    close_fds=True
+    helper_script = UPDATE_DIRECTORY / "install_update.ps1"
+    script = r'''
+param(
+    [Parameter(Mandatory=$true)][int]$TargetProcessId,
+    [Parameter(Mandatory=$true)][string]$SourcePath,
+    [Parameter(Mandatory=$true)][string]$TargetPath,
+    [Parameter(Mandatory=$true)][string]$MetadataPath,
+    [Parameter(Mandatory=$true)][string]$ScriptPath
 )
-""",
-        encoding="utf-8"
-    )
-
-    creation_flags = 0
-
-    if os.name == "nt":
-
-        creation_flags = (
-            subprocess.CREATE_NO_WINDOW
+$ErrorActionPreference = "Stop"
+while (Get-Process -Id $TargetProcessId -ErrorAction SilentlyContinue) {
+    Start-Sleep -Milliseconds 400
+}
+$installed = $false
+for ($attempt = 0; $attempt -lt 20; $attempt++) {
+    try {
+        Copy-Item -LiteralPath $SourcePath -Destination $TargetPath -Force
+        $installed = $true
+        break
+    } catch {
+        Start-Sleep -Milliseconds 500
+    }
+}
+if (-not $installed) { exit 1 }
+try {
+    Start-Process -FilePath $TargetPath
+    Remove-Item -LiteralPath $SourcePath -Force -ErrorAction SilentlyContinue
+    Remove-Item -LiteralPath $MetadataPath -Force -ErrorAction SilentlyContinue
+    Remove-Item -LiteralPath $ScriptPath -Force -ErrorAction SilentlyContinue
+} catch { exit 1 }
+'''
+    try:
+        UPDATE_DIRECTORY.mkdir(parents=True, exist_ok=True)
+        helper_script.write_text(script, encoding="utf-8")
+        subprocess.Popen(
+            [
+                powershell, "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass",
+                "-WindowStyle", "Hidden", "-File", str(helper_script), str(os.getpid()),
+                str(downloaded), str(current_executable), str(UPDATE_INFO_FILE), str(helper_script),
+            ],
+            close_fds=True,
+            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
         )
-
-    subprocess.Popen(
-        [
-            sys.executable,
-            str(helper_script),
-            str(os.getpid()),
-            str(downloaded),
-            str(current_executable)
-        ],
-        creationflags=creation_flags
-    )
-
-    return True
+        return True
+    except OSError:
+        return False
