@@ -14,7 +14,7 @@ from Updates.update_manager import (
 # NEXO CALCULATOR VERSION
 # ============================================================
 
-PUBLIC_VERSION = "0.2026.00009PR3"
+PUBLIC_VERSION = "0.2026.00009-PR3"
 INTERNAL_BUILD = "INT01"
 
 
@@ -347,26 +347,32 @@ class NexoCalculator(tk.Tk):
 
     # ========================================================
 
-    def check_pending_update(self):
+ 
+def check_pending_update(self):
 
-        pending = get_pending_update()
+    pending = get_pending_update()
 
-        if pending:
+    if pending:
 
-            version = pending.get(
-                "version",
-                ""
+        version = pending.get(
+            "version",
+            ""
+        )
+
+        if version:
+            self.show_downloaded_update(
+                version
             )
 
-            if version:
-                self.show_downloaded_update(
-                    version
-                )
+        # The downloaded update is already available.
+        # Offer it again on the next startup if deferred.
+        return
 
-        self.after(
-            300,
-            self.check_for_updates
-        )
+    self.after(
+        300,
+        self.check_for_updates
+    )
+
 
     # ========================================================
 
